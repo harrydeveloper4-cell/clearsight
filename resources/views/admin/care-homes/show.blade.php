@@ -52,7 +52,7 @@
 
 {{-- Residents Table --}}
 <div class="section-header">
-    <div class="section-title">Residents</div>
+    <div class="section-title">Residennts </div>
     <a href="{{ route('admin.residents.create', $careHome->id) }}" class="btn btn-primary btn-sm">+ Add Resident</a>
 </div>
 
