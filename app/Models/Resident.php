@@ -11,6 +11,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 class Resident extends Model
 {
     use SoftDeletes, LogsActivity;
+
     protected $fillable = [
         'care_home_id',
         'first_name',
@@ -44,6 +45,11 @@ class Resident extends Model
         return $this->hasMany(ServiceRequest::class);
     }
 
+    public function documents()
+    {
+        return $this->hasMany(ResidentDocument::class);
+    }
+
     // ─── Computed Attributes ─────────────────────────────────────
 
     public function getFullNameAttribute(): string
@@ -56,29 +62,46 @@ class Resident extends Model
         return $this->dob ? $this->dob->age : 0;
     }
 
-    // ─── Auto-calculate status before saving ─────────────────────
+    // ─── Dynamic Status Calculation (Always Live) ────────────────
+
+    public function getStatusAttribute($value): string
+    {
+        if (!$this->next_recall_date) {
+            return $value ?? 'ok';
+        }
+
+        $today = Carbon::today();
+        $recall = Carbon::parse($this->next_recall_date)->startOfDay();
+
+        if ($recall->lt($today)) {
+            return 'overdue';
+        }
+
+        if ($recall->lte($today->copy()->addDays(30))) {
+            return 'due';
+        }
+
+        return 'ok';
+    }
+
+    // ─── Auto-sync DB column when saving (for DB queries/filters) ─
 
     protected static function booted(): void
     {
         static::saving(function (Resident $resident) {
             if ($resident->next_recall_date) {
                 $today = Carbon::today();
-                $recall = Carbon::parse($resident->next_recall_date);
+                $recall = Carbon::parse($resident->next_recall_date)->startOfDay();
 
-                if ($recall->isPast()) {
-                    $resident->status = 'overdue';
-                } elseif ($recall->diffInDays($today, false) >= -30) {
-                    $resident->status = 'due';
+                if ($recall->lt($today)) {
+                    $resident->attributes['status'] = 'overdue';
+                } elseif ($recall->lte($today->copy()->addDays(30))) {
+                    $resident->attributes['status'] = 'due';
                 } else {
-                    $resident->status = 'ok';
+                    $resident->attributes['status'] = 'ok';
                 }
             }
         });
-    }
-
-    public function documents()
-    {
-        return $this->hasMany(ResidentDocument::class);
     }
 
     public function getActivitylogOptions(): LogOptions
